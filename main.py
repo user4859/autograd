@@ -92,6 +92,8 @@ def CrossEntropyLoss(input_array: Union[np.ndarray, List, float, int],
                      logit_axis: int = -1) -> float:
     """
     Computes cross-entropy loss between an input array and a target array.
+    
+    Inputed arrays **MUST** have been Softmaxed before.
 
     Args:
         input_array (Array-Like): The input array (or array like object) to process.
@@ -133,9 +135,13 @@ def CrossEntropyLoss(input_array: Union[np.ndarray, List, float, int],
     eps = 1e-10
     clipped = np.clip(input_array, eps, None)
     losses = -np.sum(target_array * np.log(clipped), axis=logit_axis)
-    print(losses)
 
     return float(np.mean(losses))
+
+
+class SequenceError(Exception):
+    """Exception raised when custom operations are done out of a required sequence"""
+    pass
 
 
 class LinearLayer():
@@ -146,6 +152,8 @@ class LinearLayer():
         random_seed (int | None): The NumPy random seed can be set to allow creating layers with 
                                   the same initial conditions repeatedly.
         precision (str): NumPy dtype string for inputs, parameters, and gradients.
+        last_operation (str): Keeps track of last function called to ensure forward, backward and
+                              updates happen in that order during runtime.
         weight_matrix (np.ndarray): Shape (input_size, output_size).
         bias_matrix (np.ndarray): Shape (output_size,).
         last_inputed_array (np.ndarray | None): Cached input from the last forward pass.
@@ -162,17 +170,20 @@ class LinearLayer():
     
 
     def __init__(self, input_size: int, output_size: int, precision: str = 'float32', random_seed: int = None):
-        if random_seed != None:
+        if random_seed is not None:
             try:
-                np.random.seed(random_seed)
+               rng =  np.random.default_rng(random_seed)
             except (TypeError, ValueError) as exc:
                 raise TypeError("Random seed must be int") from exc
+        else:
+            rng = np.random.default_rng()
 
         self.random_seed = random_seed
         self.precision = precision
+        self.last_operation = None
         
-        self.weight_matrix = np.array(np.random.randint(-1000, 1000, size=(input_size,output_size)) / 1000).astype(self.precision)
-        self.bias_matrix = np.array(np.random.randint(-1000, 1000, size=(output_size)) / 1000).astype(self.precision)
+        self.weight_matrix = np.array(rng.integers(-1000, 1000, size=(input_size,output_size)) / 1000).astype(self.precision)
+        self.bias_matrix = np.array(rng.integers(-1000, 1000, size=(output_size)) / 1000).astype(self.precision)
 
         self.last_inputed_array = None
         self.dB = None
@@ -211,10 +222,13 @@ class LinearLayer():
 
         self.last_inputed_array = input_array.copy().astype(self.precision)
         input_array = np.dot(self.last_inputed_array, self.weight_matrix) + self.bias_matrix
+
+        self.last_operation = "forward"
+
         return input_array
 
 
-    def backward(self, error_array: np.ndarray):
+    def backwards(self, error_array: np.ndarray):
         """
         Calculates gradients for the layer parameters and the gradient to pass to the previous layer.
 
@@ -233,11 +247,18 @@ class LinearLayer():
               contains the inputs used during the forward pass.
         """
 
+        if self.last_operation != "forward":
+            raise SequenceError(
+                "A forward pass must have been compleated imidatley before the coresponding backwards pass."
+                )
+
         error_array = error_array.astype(self.precision)
 
         self.dB = np.sum(error_array, axis=0, keepdims=True)
         self.dW = np.dot(self.last_inputed_array.T, error_array)
         self.passed_down_grad = np.dot(error_array, self.weight_matrix.T)
+
+        self.last_operation = "backwards"
 
 
     def update_parameters(self, learning_rate: float):
@@ -252,6 +273,11 @@ class LinearLayer():
             - `self.weight_matrix` is updated with `self.weight_matrix -= self.dW * learing_rate`.
             - `self.bias_matrix` is updated with `self.bias_matrix -= self.dB * learing_rate`.
         """
+
+        if self.last_operation != "backwards":
+                    raise SequenceError(
+                        "A backwards pass must have been compleated imidatley before updating layer paramaters."
+                        )
 
         try: 
             float(learning_rate)

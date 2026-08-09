@@ -63,7 +63,6 @@ def Softmax(input_array: Union[np.ndarray, List, float, int], logit_axis: int = 
     Raises:
         TypeError: If the input cannot be safely converted into a numeric NumPy array.
         ValueError: If the input array is empty or if logit_axis is out of bounds.
-
     """
 
     # Make sure input is/can be a Numpy array
@@ -86,6 +85,7 @@ def Softmax(input_array: Union[np.ndarray, List, float, int], logit_axis: int = 
     moved_input = float_array - np.max(float_array, axis=logit_axis, keepdims=True)
     exponents = np.exp(moved_input)
     return exponents / np.sum(exponents, axis=logit_axis, keepdims=True)
+
 
 def CrossEntropyLoss(input_array: Union[np.ndarray, List, float, int],
                      target_array: Union[np.ndarray, List, float, int],
@@ -136,3 +136,130 @@ def CrossEntropyLoss(input_array: Union[np.ndarray, List, float, int],
     print(losses)
 
     return float(np.mean(losses))
+
+
+class LinearLayer():
+    """
+    Simple fully connected linear layer.
+
+    Attributes:
+        random_seed (int | None): The NumPy random seed can be set to allow creating layers with 
+                                  the same initial conditions repeatedly.
+        precision (str): NumPy dtype string for inputs, parameters, and gradients.
+        weight_matrix (np.ndarray): Shape (input_size, output_size).
+        bias_matrix (np.ndarray): Shape (output_size,).
+        last_inputed_array (np.ndarray | None): Cached input from the last forward pass.
+        dB (np.ndarray | None): Bias gradient computed in backward().
+        dW (np.ndarray | None): Weight gradient computed in backward().
+        passed_down_grad (np.ndarray | None): Gradient with respect to the input.
+
+    Notes:
+        - The layer computes the affine transform: output = input @ weight_matrix + bias_matrix.
+        - `forward()` must be called before `backward()`.
+        - `backward()` must be called before `update_paramaters()`.
+    """
+
+    
+
+    def __init__(self, input_size: int, output_size: int, precision: str = 'float32', random_seed: int = None):
+        if random_seed != None:
+            try:
+                np.random.seed(random_seed)
+            except (TypeError, ValueError) as exc:
+                raise TypeError("Random seed must be int") from exc
+
+        self.random_seed = random_seed
+        self.precision = precision
+        
+        self.weight_matrix = np.array(np.random.randint(-1000, 1000, size=(input_size,output_size)) / 1000).astype(self.precision)
+        self.bias_matrix = np.array(np.random.randint(-1000, 1000, size=(output_size)) / 1000).astype(self.precision)
+
+        self.last_inputed_array = None
+        self.dB = None
+        self.dW = None
+        self.passed_down_grad = None
+
+
+
+    def forward(self, input_array: Union[np.ndarray, List, float, int]) -> np.ndarray:
+        """
+        Passes an array through the linear layer.
+            X = W.X + B
+
+        Args:
+            input_array (Array-Like): The input array (or array like object) to process.
+        
+        Returns:
+            np.ndarray: The inputted array is coppied for later use (back propgation) before being passed forward in place.
+
+        Raises:
+            TypeError: If the input cannot be safely converted into a numeric NumPy array.
+            ValueError: If the input array is empty.
+        """
+
+        try:
+            input_array = np.asarray(input_array, dtype=self.precision)
+        except (TypeError, ValueError) as e:
+            raise TypeError(f"Input must be a numeric array or array-like object. Original error: {e}")
+        
+        # Check for empty arrays
+        if input_array.size == 0:
+            raise ValueError("Cannot pass forward an empty array.")
+
+        if input_array.ndim == 1:
+                    input_array = np.array([input_array], dtype=self.precision)
+
+        self.last_inputed_array = input_array.copy().astype(self.precision)
+        input_array = np.dot(self.last_inputed_array, self.weight_matrix) + self.bias_matrix
+        return input_array
+
+
+    def backward(self, error_array: np.ndarray):
+        """
+        Calculates gradients for the layer parameters and the gradient to pass to the previous layer.
+
+        Args:
+            error_array (np.ndarray): The gradient of the loss with respect to the layer output.
+                Expected shape is (batch_size, output_size).
+
+        Updates:
+            self.dB: Gradient of the loss with respect to the bias vector, summed over the batch.
+            self.dW: Gradient of the loss with respect to the weight matrix.
+            self.passed_down_grad: Gradient of the loss with respect to the layer input,
+                to be passed to earlier layers during backpropagation.
+
+        Notes:
+            - `forward` must be called before `backward` so `self.last_inputed_array`
+              contains the inputs used during the forward pass.
+        """
+
+        error_array = error_array.astype(self.precision)
+
+        self.dB = np.sum(error_array, axis=0, keepdims=True)
+        self.dW = np.dot(self.last_inputed_array.T, error_array)
+        self.passed_down_grad = np.dot(error_array, self.weight_matrix.T)
+
+
+    def update_parameters(self, learning_rate: float):
+        """
+        Updates trainable parameters using gradients computed in backward().
+
+        Args:
+            learing_rate (float): Scalar learning rate for gradient descent.
+
+        Notes:
+            - `backward()` must be called first so `self.dW` and `self.dB` are defined.
+            - `self.weight_matrix` is updated with `self.weight_matrix -= self.dW * learing_rate`.
+            - `self.bias_matrix` is updated with `self.bias_matrix -= self.dB * learing_rate`.
+        """
+
+        try: 
+            float(learning_rate)
+        except (TypeError, ValueError) as exc:
+           raise TypeError("Learning rate must be a number, preferably float") from exc
+        
+        self.weight_matrix -= self.dW * learning_rate
+        self.weight_matrix = self.weight_matrix.astype(self.precision)
+        self.bias_matrix -= self.dB * learning_rate
+        self.bias_matrix = self.bias_matrix.astype(self.precision)
+

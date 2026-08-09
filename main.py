@@ -8,7 +8,7 @@ def ReLU(input_array: Union[np.ndarray, List, float, int], inplace: bool = False
     ReLU is defined as: max(x, 0)
 
     Args:
-        input_array (np.ndarray): The array (or array like object) which the function will be applied to.
+        input_array (Array-Like): The array (or array like object) which the function will be applied to.
         inplace (bool): If True, modifies the input array directly in memory. 
                         If False, returns a newly allocated array. Defaults to False.
 
@@ -53,7 +53,7 @@ def Softmax(input_array: Union[np.ndarray, List, float, int], logit_axis: int = 
     Softmax is defined as: exp(x) / sum(exp(x))
 
     Args:
-        input_array (np.ndarray): The input array (or array like object) to process.
+        input_array (Array-Like): The input array (or array like object) to process.
         logit_axis (int): The axis along which the model outputs sit. 
                           By convention this is the last axis (-1).
 

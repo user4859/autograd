@@ -160,6 +160,7 @@ class LinearLayer():
         dB (np.ndarray | None): Bias gradient computed in backward().
         dW (np.ndarray | None): Weight gradient computed in backward().
         passed_down_grad (np.ndarray | None): Gradient with respect to the input.
+        paramaters (dict): A dictionary of the layers weight and bias arrays.
 
     Notes:
         - The layer computes the affine transform: output = input @ weight_matrix + bias_matrix.
@@ -184,6 +185,8 @@ class LinearLayer():
         
         self.weight_matrix = np.array(rng.integers(-1000, 1000, size=(input_size,output_size)) / 1000).astype(self.precision)
         self.bias_matrix = np.array(rng.integers(-1000, 1000, size=(output_size)) / 1000).astype(self.precision)
+
+        self.parramaters = {"weights" : self.weight_matrix, "biases" : self.bias_matrix}
 
         self.last_inputed_array = None
         self.dB = None
@@ -289,3 +292,40 @@ class LinearLayer():
         self.bias_matrix -= self.dB * learning_rate
         self.bias_matrix = self.bias_matrix.astype(self.precision)
 
+
+    def set_parramaters(self, parramaters : dict):
+        """
+        Sets the layer parameters to the ones stored in the input dictionary.
+
+        Args:
+            parramaters (dict): The dictionary storing the parramaters. **MUST** be in order weights, biases.
+
+        Updates:
+            self.weight_matrix: Sets self.weight_matrix to parramaters["weights"]
+            self.bias_matrix: Sets self.bias_matrix to parramaters["biases"] 
+
+        Rasies:
+            TypeError: If the input is not a dictionary or the objects inside the dictonary can not safely be converted into numpy arrays.
+            KeyError: If the inputed dictionary does not have the keys "weights" and "biases".
+            ValueError: If the arrays in the dictionary are not the same shape as the existing parramater arrays.
+        """
+
+        if not isinstance(parramaters, dict):
+            raise TypeError("Input - parramters - mnust be a dict.")
+
+        try:
+            new_weights = np.asarray(parramaters["weights"], dtype=self.precision)
+            new_biases = np.asarray(parramaters["biases"], dtype=self.precision)
+        except KeyError as exc:
+            raise KeyError("Input - parramaters - dictionary must contain 'weights' and 'biases'") from exc
+        except (TypeError, ValueError) as exc:
+            raise TypeError("Could not convert provided parramaters to numpy arrays") from exc
+
+        if new_weights.shape != self.weight_matrix.shape:
+            raise ValueError(f"weights shape mismatch: expected {self.weight_matrix.shape}, got {new_weights.shape}")
+        if new_biases.shape != self.bias_matrix.shape:
+            raise ValueError(f"biases shape mismatch: expected {self.bias_matrix.shape}, got {new_biases.shape}")
+
+        self.weight_matrix = new_weights
+        self.bias_matrix = new_biases
+        self.parramaters = {"weights": self.weight_matrix, "biases": self.bias_matrix}

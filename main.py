@@ -175,6 +175,9 @@ def CrossEntropyLoss(input_array: Union[np.ndarray, List, float, int],
     return float(np.mean(losses))
 
 
+derivatives = {"ReLU" : backwards_ReLU}
+
+
 class SequenceError(Exception):
     """Exception raised when custom operations are done out of a required sequence"""
     pass

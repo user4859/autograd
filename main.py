@@ -46,6 +46,42 @@ def ReLU(input_array: Union[np.ndarray, List, float, int], inplace: bool = False
         return np.maximum(float_array, 0)
 
 
+def backwards_ReLU(input_array: Union[np.ndarray, List, float, int]) -> np.ndarray:
+    """
+    Returns the gradient of an array with respect to loss, when passed through ReLU.
+    
+    backwards_ReLU is defined as: if x > 0 -> x = 1, else x = 0
+
+    Args:
+        input_array (Array-Like): The array which the function will be applied to.
+
+    Returns:
+        output_array (np.ndarray): The input after having the ReLU function applied, now as a ndarray matching
+                                   the precision of the input.
+    
+    Raises:
+        TypeError: If the input is not a numpy array.
+        ValueError: If the input array is empty.
+    """
+
+    # Make sure input is/can be a Numpy array and elements are numeric
+    try:
+        input_array = np.asarray(input_array)
+        if not np.issubdtype(input_array.dtype, np.number):
+            raise TypeError("Array elements must be numeric.")
+    
+    except (TypeError, ValueError) as e:
+        raise TypeError(f"Input must be a numeric array or array-like object. Original error: {e}")
+
+    # Check for empty arrays
+    if input_array.size == 0:
+        raise ValueError("Cannot apply backwards_ReLU to an empty array.")
+
+    precision = input_array.dtype
+
+    return (input_array > 0).astype(precision)
+
+
 def Softmax(input_array: Union[np.ndarray, List, float, int], logit_axis: int = -1) -> np.ndarray:
     """
     Applies the Softmax function to all vectors along a specified axis in a given array.
@@ -257,7 +293,7 @@ class LinearLayer():
 
         error_array = error_array.astype(self.precision)
 
-        self.dB = np.sum(error_array, axis=0, keepdims=True)
+        self.dB = np.sum(error_array, axis=0)
         self.dW = np.dot(self.last_inputed_array.T, error_array)
         self.passed_down_grad = np.dot(error_array, self.weight_matrix.T)
 

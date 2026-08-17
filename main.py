@@ -350,13 +350,13 @@ class LinearLayer():
         """
 
         if not isinstance(parramaters, dict):
-            raise TypeError("Input - parramters - mnust be a dict.")
+            raise TypeError(f"Input - {parramaters} - must be a dict.")
 
         try:
             new_weights = np.asarray(parramaters["weights"], dtype=self.precision)
             new_biases = np.asarray(parramaters["biases"], dtype=self.precision)
         except KeyError as exc:
-            raise KeyError("Input - parramaters - dictionary must contain 'weights' and 'biases'") from exc
+            raise KeyError(f"Input - {parramaters} - dictionary must contain 'weights' and 'biases'") from exc
         except (TypeError, ValueError) as exc:
             raise TypeError("Could not convert provided parramaters to numpy arrays") from exc
 
@@ -365,6 +365,6 @@ class LinearLayer():
         if new_biases.shape != self.bias_matrix.shape:
             raise ValueError(f"biases shape mismatch: expected {self.bias_matrix.shape}, got {new_biases.shape}")
 
-        self.weight_matrix = new_weights
-        self.bias_matrix = new_biases
+        self.weight_matrix = new_weights.copy()
+        self.bias_matrix = new_biases.copy()
         self.parramaters = {"weights": self.weight_matrix, "biases": self.bias_matrix}

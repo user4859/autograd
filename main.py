@@ -226,12 +226,11 @@ class LinearLayer():
         self.bias_matrix = np.array(rng.integers(-1000, 1000, size=(output_size)) / 1000).astype(self.precision)
 
         self.parramaters = {"weights" : self.weight_matrix, "biases" : self.bias_matrix}
+        self.gradients = {"dW" : None, "dB" : None}
 
         self.last_inputed_array = None
-        self.dB = None
-        self.dW = None
+        self.last_outputed_array = None
         self.passed_down_grad = None
-
 
 
     def forward(self, input_array: Union[np.ndarray, List, float, int]) -> np.ndarray:
@@ -257,17 +256,19 @@ class LinearLayer():
         
         # Check for empty arrays
         if input_array.size == 0:
-            raise ValueError("Cannot pass forward an empty array.")
+            raise ValueError("Can not pass forward an empty array.")
 
         if input_array.ndim == 1:
                     input_array = np.array([input_array], dtype=self.precision)
 
         self.last_inputed_array = input_array.copy().astype(self.precision)
-        input_array = np.dot(self.last_inputed_array, self.weight_matrix) + self.bias_matrix
+
+        # Actual forward pass
+        self.last_outputed_array = np.dot(self.last_inputed_array, self.weight_matrix) + self.bias_matrix
 
         self.last_operation = "forward"
 
-        return input_array
+        return self.last_outputed_array
 
 
     def backwards(self, error_array: np.ndarray):
@@ -291,13 +292,13 @@ class LinearLayer():
 
         if self.last_operation != "forward":
             raise SequenceError(
-                "A forward pass must have been compleated imidatley before the coresponding backwards pass."
+                "A forward pass must have been compleated imidatley before the a backwards pass."
                 )
 
         error_array = error_array.astype(self.precision)
 
-        self.dB = np.sum(error_array, axis=0)
-        self.dW = np.dot(self.last_inputed_array.T, error_array)
+        self.gradients["dB"] = np.sum(error_array, axis=0)
+        self.gradients["dW"] = np.dot(self.last_inputed_array.T, error_array)
         self.passed_down_grad = np.dot(error_array, self.weight_matrix.T)
 
         self.last_operation = "backwards"
@@ -326,9 +327,9 @@ class LinearLayer():
         except (TypeError, ValueError) as exc:
            raise TypeError("Learning rate must be a number, preferably float") from exc
         
-        self.weight_matrix -= self.dW * learning_rate
+        self.weight_matrix -= self.gradients["dW"] * learning_rate
         self.weight_matrix = self.weight_matrix.astype(self.precision)
-        self.bias_matrix -= self.dB * learning_rate
+        self.bias_matrix -= self.gradients["dB"] * learning_rate
         self.bias_matrix = self.bias_matrix.astype(self.precision)
 
 

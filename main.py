@@ -48,19 +48,18 @@ def ReLU(input_array: Union[np.ndarray, List, float, int], inplace: bool = False
 
 def backwards_ReLU(input_array: Union[np.ndarray, List, float, int]) -> np.ndarray:
     """
-    Returns the gradient of an array with respect to loss, when passed through ReLU.
-    
-    backwards_ReLU is defined as: if x > 0 -> x = 1, else x = 0
+    Computes the derivative of the ReLU function element-wise.
+
+    The derivative is 1 where x > 0 and 0 where x <= 0.
 
     Args:
-        input_array (Array-Like): The array which the function will be applied to.
+        input_array (Array-Like): Numeric input values.
 
     Returns:
-        output_array (np.ndarray): The input after having the ReLU function applied, now as a ndarray matching
-                                   the precision of the input.
-    
+        np.ndarray: An array containing the ReLU derivative for each input.
+
     Raises:
-        TypeError: If the input is not a numpy array.
+        TypeError: If the input cannot be converted to a numeric NumPy array.
         ValueError: If the input array is empty.
     """
 
@@ -128,23 +127,25 @@ def CrossEntropyLoss(input_array: Union[np.ndarray, List, float, int],
                      logit_axis: int = -1) -> float:
     """
     Computes cross-entropy loss between an input array and a target array.
-    
-    Inputed arrays **MUST** have been Softmaxed before.
+
+    Inputed arrays **MUST** be a probability distribution summing to 1.
+    The loss is calculated as: -sum(target * log(input))
+    Values smaller than a small epsilon (1e-10) are clipped to avoid log(0).
 
     Args:
         input_array (Array-Like): The input array (or array like object) to process.
         target_array (Array-Like): The array (or array like object) which the input will 
                                    be compared against.
-        logit_axis (int): The axis along which the model outputs sit. 
+        logit_axis (int): The axis along which the model's outputs sit. 
                           By convention this is the last axis (-1).
 
     Returns:
-        float: Scalar cross-entropy loss as a float.
+        float: Mean cross-entropy loss allong the logit_axis.
 
     Raises:
-        TypeError: If inputs cannot be converted to numeric arrays.
-        ValueError: If shapes do not match, the array is empty, values are negative,
-                    or the axis is invalid.
+        TypeError: If either input cannot be converted to numeric arrays.
+        ValueError: If shapes do not match, either array is empty, either array does not 
+                    sum to 1 along the logit axis, any value is negative, or the axis is invalid.
     """
     
     try:
@@ -165,8 +166,15 @@ def CrossEntropyLoss(input_array: Union[np.ndarray, List, float, int],
     if logit_axis >= ndim or logit_axis < -ndim:
         raise ValueError(f"Axis {logit_axis} is out of bounds for an array with {ndim} dimensions.")
 
-    if np.any(input_array < 0):
-        raise ValueError("Input values must be non-negative.")
+    if np.any(input_array < 0) or np.any(target_array < 0):
+        raise ValueError("All inputed values must be non-negative.")
+
+    # Check arrays are acutaly probability distributions - sum to 1
+    if not (
+        np.allclose(np.sum(input_array, axis=logit_axis), 1.0)
+        and np.allclose(np.sum(target_array, axis=logit_axis), 1.0)
+    ):
+        raise ValueError("Both arrays must sum to 1 along the logit axis.")
 
     eps = 1e-10
     clipped = np.clip(input_array, eps, None)
@@ -179,38 +187,60 @@ derivatives = {"ReLU" : backwards_ReLU}
 
 
 class SequenceError(Exception):
-    """Exception raised when custom operations are done out of a required sequence"""
+    """
+    Exception raised when model operations are performed out of order.
+
+    A forward pass must occur before a backward pass, and a backward pass
+    must occur before parameters are updated.
+    """
     pass
 
 
 class LinearLayer():
     """
-    Simple fully connected linear layer.
+    A fully connected linear layer.
+
+    The layer computes:
+
+        output = input @ weight_matrix + bias_matrix
 
     Attributes:
-        random_seed (int | None): The NumPy random seed can be set to allow creating layers with 
-                                  the same initial conditions repeatedly.
-        precision (str): NumPy dtype string for inputs, parameters, and gradients.
-        initialisation_function(str): Allows wight matrix to be initialised using one of the set methods, defults to random uniform [-1, 1].
-        last_operation (str): Keeps track of last function called to ensure forward, backward and
-                              updates happen in that order during runtime.
-        weight_matrix (np.ndarray): Shape (input_size, output_size).
-        bias_matrix (np.ndarray): Shape (output_size,).
-        last_inputed_array (np.ndarray | None): Cached input from the last forward pass.
-        dB (np.ndarray | None): Bias gradient computed in backward().
-        dW (np.ndarray | None): Weight gradient computed in backward().
-        passed_down_grad (np.ndarray | None): Gradient with respect to the input.
-        paramaters (dict): A dictionary of the layers weight and bias arrays.
+        random_seed (int | None): Seed used to initialise the random generator.
+        precision (str): NumPy dtype used for parameters, inputs, and gradients.
+        last_operation (str | None): Last completed operation.
+        weight_matrix (np.ndarray): Weight values with shape
+                                    (input_size, output_size).
+        bias_matrix (np.ndarray): Bias values with shape (output_size,).
+        last_inputed_array (np.ndarray | None): Input saved during forward().
+        last_outputed_array (np.ndarray | None): Output produced during forward().
+        gradients (dict): Weight and bias gradients from backwards().
+        parramaters (dict): Current layer weights and biases.
+        passed_down_grad (np.ndarray | None): Gradient passed to the preceding layer.
 
     Notes:
-        - The layer computes the affine transform: output = input @ weight_matrix + bias_matrix.
-        - `forward()` must be called before `backward()`.
-        - `backward()` must be called before `update_paramaters()`.
+        forward() must be called before backwards().
+        backwards() must be called before update_parameters().
     """
 
-    
-
     def __init__(self, input_size: int, output_size: int, precision: str = 'float32', random_seed: int = None, initialisation_function : str = None):
+        """
+        Creates and initialises a fully connected layer.
+
+        Args:
+            input_size (int): Number of input features.
+            output_size (int): Number of output features.
+            precision (str): NumPy dtype used by the layer.
+            random_seed (int | None): Optional seed for reproducible
+                                       initialisation.
+            initialisation_function (str | None): Initialisation method.
+                                                  "He" selects He initialisation;
+                                                  other values use uniform values
+                                                  between -1 and 1.
+
+        Raises:
+            TypeError: If random_seed is invalid.
+        """
+
         if random_seed is not None:
             try:
                rng =  np.random.default_rng(random_seed)
@@ -239,18 +269,23 @@ class LinearLayer():
 
     def forward(self, input_array: Union[np.ndarray, List, float, int]) -> np.ndarray:
         """
-        Passes an array through the linear layer.
-            X = W.X + B
+        Computes the forward pass through the fully conected layer.
+
+        One-dimensional inputs are treated as a batch containing one sample
+        - making them 2 dimensional.
+        The input is cached for use during backpropagation.
 
         Args:
-            input_array (Array-Like): The input array (or array like object) to process.
-        
+            input_array (Array-Like): Numeric input with shape
+                                      (batch_size, input_size), or a single
+                                      input vector with shape (input_size,).
+
         Returns:
-            np.ndarray: The inputted array is coppied for later use (back propgation) before being passed forward in place.
+            np.ndarray: Layer output with shape (batch_size, output_size).
 
         Raises:
-            TypeError: If the input cannot be safely converted into a numeric NumPy array.
-            ValueError: If the input array is empty.
+            TypeError: If the input cannot be converted to the layer precision.
+            ValueError: If the input is empty.
         """
 
         try:
@@ -277,21 +312,21 @@ class LinearLayer():
 
     def backwards(self, error_array: np.ndarray):
         """
-        Calculates gradients for the layer parameters and the gradient to pass to the previous layer.
+        Calculates parameter gradients and the gradient with respect to the layer input.
 
         Args:
-            error_array (np.ndarray): The gradient of the loss with respect to the layer output.
-                Expected shape is (batch_size, output_size).
+            error_array (np.ndarray): Gradient of the loss with respect to
+                                     the layer output, with shape
+                                     (batch_size, output_size).
 
         Updates:
-            self.dB: Gradient of the loss with respect to the bias vector, summed over the batch.
-            self.dW: Gradient of the loss with respect to the weight matrix.
-            self.passed_down_grad: Gradient of the loss with respect to the layer input,
-                to be passed to earlier layers during backpropagation.
+            gradients["dB"]: Bias gradient summed across the batch.
+            gradients["dW"]: Weight gradient.
+            passed_down_grad: Gradient with respect to the layer input.
 
-        Notes:
-            - `forward` must be called before `backward` so `self.last_inputed_array`
-              contains the inputs used during the forward pass.
+        Raises:
+            SequenceError: If forward() was not called immediately before
+                           backwards().
         """
 
         if self.last_operation != "forward":
@@ -310,15 +345,19 @@ class LinearLayer():
 
     def update_parameters(self, learning_rate: float):
         """
-        Updates trainable parameters using gradients computed in backward().
+        Updates the weights and biases using gradients computed in backwards().
+
+        Parameters are updated according to:
+
+            parameter = parameter - learning_rate * gradient
 
         Args:
-            learing_rate (float): Scalar learning rate for gradient descent.
+            learning_rate (float): Finite scalar learning rate.
 
-        Notes:
-            - `backward()` must be called first so `self.dW` and `self.dB` are defined.
-            - `self.weight_matrix` is updated with `self.weight_matrix -= self.dW * learing_rate`.
-            - `self.bias_matrix` is updated with `self.bias_matrix -= self.dB * learing_rate`.
+        Raises:
+            TypeError: If learning_rate is not numeric.
+            SequenceError: If backwards() was not called immediately before
+                           update_parramaters().
         """
 
         if self.last_operation != "backwards":
@@ -342,19 +381,16 @@ class LinearLayer():
 
     def set_parramaters(self, parramaters : dict):
         """
-        Sets the layer parameters to the ones stored in the input dictionary.
+        Replaces the layer's weights and biases.
 
         Args:
-            parramaters (dict): The dictionary storing the parramaters. **MUST** be in order weights, biases.
+            parramaters (dict): Dictionary containing "weights" and "biases".
 
-        Updates:
-            self.weight_matrix: Sets self.weight_matrix to parramaters["weights"]
-            self.bias_matrix: Sets self.bias_matrix to parramaters["biases"] 
-
-        Rasies:
-            TypeError: If the input is not a dictionary or the objects inside the dictonary can not safely be converted into numpy arrays.
-            KeyError: If the inputed dictionary does not have the keys "weights" and "biases".
-            ValueError: If the arrays in the dictionary are not the same shape as the existing parramater arrays.
+        Raises:
+            TypeError: If the argument is not a dictionary or its values
+                       cannot be converted to NumPy arrays.
+            KeyError: If "weights" or "biases" is missing.
+            ValueError: If either parameter has an incompatible shape.
         """
 
         if not isinstance(parramaters, dict):
@@ -376,3 +412,293 @@ class LinearLayer():
         self.weight_matrix = new_weights.copy()
         self.bias_matrix = new_biases.copy()
         self.parramaters = {"weights": self.weight_matrix, "biases": self.bias_matrix}
+
+
+class Model():
+    """
+    A sequential neural network composed of fully conected linear layers, 
+    activation functions and a normalisation step.
+
+    The model contains an input layer, zero or more hidden layers, an output
+    layer, and a normalisation function. Hidden layers use the selected
+    activation function.
+
+    Attributes:
+        input_size (int): Number of input features.
+        hidden_size (int): Number of features in hidden layers.
+        output_size (int): Number of model outputs.
+        number_of_layers (int): Number of fully conected linear layers.
+        precision (str): NumPy dtype used throughout the model.
+        random_seed (int | None): Optional initialisation seed.
+        initialisation_function (str | None): Parameter initialisation method.
+        activation_function (callable): Function used after hidden layers.
+        normalisation_function (callable): Function used after the output layer.
+        linear_layers (list): LinearLayer objects in execution order.
+        modules (list): Ordered model operations.
+        gradients (dict): Gradients grouped by layer.
+        parramaters (dict): Parameters grouped by layer.
+        last_operation (str | None): Most recently completed model operation.
+
+    Notes:
+        If number_of_layers = 1, then the input layer is the output layer,
+        and only the normalisation function is used.
+        The current backwards() implementation supports Softmax followed by
+        CrossEntropyLoss.
+    """
+
+    def __init__(self,
+                  input_size : int, hidden_size : int, output_size : int,
+                  number_of_layers : int, 
+                  activation_function: callable, normalisation_function: callable,
+                  precision : str = 'float32', random_seed : int = None,
+                  initialisation_function : str = None):
+        """
+        Constructs the model.
+
+        Args:
+            input_size (int): Number of input features.
+            hidden_size (int): Number of features in hidden layers.
+            output_size (int): Number of output features.
+            number_of_layers (int): Number of linear layers.
+            activation_function (callable): Activation applied after hidden
+                                            linear layers.
+            normalisation_function (callable): Function applied after the
+                                               final linear layer.
+            precision (str): NumPy dtype used by the model.
+            random_seed (int | None): Optional seed for reproducible weights.
+            initialisation_function (str | None): Weight initialisation method.
+        """
+
+        self.input_size = input_size
+        self.hidden_size = hidden_size
+        self.output_size = output_size
+        self.number_of_layers = number_of_layers
+
+        self.precision = precision
+        self.random_seed = random_seed
+        self.initialisation_function = initialisation_function
+
+        self.activation_function = activation_function
+        self.normalisation_function = normalisation_function
+
+        self.activation_function_derivative = derivatives.get(
+            getattr(self.activation_function, "__name__", None)
+        )
+        self.normalisation_function_derivative = derivatives.get(
+            getattr(self.normalisation_function, "__name__", None)
+        )
+
+
+        layers = []
+        self.linear_layers = []
+
+        if self.number_of_layers == 1:
+            layer = LinearLayer(self.input_size, self.output_size,
+                                    self.precision, self.random_seed,
+                                    self.initialisation_function)
+            layers.append([layer])
+            self.linear_layers.append(layer)
+        else:
+            input_layer = LinearLayer(self.input_size, self.hidden_size,
+                                          self.precision, self.random_seed,
+                                          self.initialisation_function)
+            layers.append([input_layer, self.activation_function])
+            self.linear_layers.append(input_layer)
+
+            for _ in range(max(0, self.number_of_layers - 2)):
+                hidden_layer = LinearLayer(self.hidden_size, self.hidden_size,
+                                              self.precision, self.random_seed,
+                                              self.initialisation_function)
+                layers.append([hidden_layer, self.activation_function])
+                self.linear_layers.append(hidden_layer)
+
+            output_layer = LinearLayer(self.hidden_size, self.output_size,
+                                          self.precision, self.random_seed,
+                                          self.initialisation_function)
+            layers.append([output_layer])
+            self.linear_layers.append(output_layer)
+
+        layers.append([self.normalisation_function])
+
+        self.modules = layers
+        # self.gradients serves no functional purposse, but make it easier to acces all the differnt layer's gradients at once.
+        self.gradients = {f"Layer {i}": {} for i in range(1, self.number_of_layers + 1)}
+
+        self.parramaters = {}
+        for i, layer in enumerate(self.linear_layers, start=1):
+            self.parramaters[f"Layer {i}"] = layer.parramaters
+
+        self.last_operation = None
+
+
+    def forward(self, x: Union[np.ndarray, List, float, int]) -> np.ndarray:
+        """
+        Executes a forward pass through every model module in order.
+
+        Args:
+            x (Array-Like): Numeric model input.
+
+        Returns:
+            np.ndarray: The model's final output.
+
+        Raises:
+            TypeError: If a module is neither callable nor an object with a
+                       callable forward() method.
+        """
+
+        for module in self.modules:
+            for obj in module:
+                if hasattr(obj, "forward") and callable(obj.forward):
+                    x = obj.forward(x)
+                elif callable(obj):
+                    x = obj(x)
+                else:
+                    raise TypeError(f"Module - {type(obj).__name__} - does not have a 'forward' function, or is not callable and so is not supported")
+        self.last_operation = "forward"
+        return x
+
+
+    def backwards(self, output : np.ndarray, target : np.ndarray, loss_function):
+        """
+        Backpropagates the loss gradient through all linear layers.
+
+        For Softmax followed by mean CrossEntropyLoss, the output gradient is:
+
+            (output - target) / batch_size
+
+        Gradients are calculated in reverse layer order and stored in the model
+        and individual layers.
+
+        Args:
+            output (np.ndarray): Model output from the preceding forward pass.
+            target (np.ndarray): Expected target values.
+            loss_function (callable): Loss function used for training.
+
+        Raises:
+            SequenceError: If forward() was not called immediately beforehand.
+            TypeError: If inputs are non-numeric or the configured derivative
+                       combination is unsupported.
+            ValueError: If either input is empty or their shapes differ.
+        """
+
+        if self.last_operation != "forward":
+            raise SequenceError("Must compleate a forwards pass imidatley before a backwards pass.")
+
+        try:
+            output = np.asarray(output, dtype=self.precision)
+            target = np.asarray(target, dtype=self.precision)
+        except (TypeError, ValueError) as e:
+            raise TypeError(f"The inputed arrays - {output} and {target} must be a numeric array or array-like object. Original error: {e}")
+
+        if output.size == 0 or target.size == 0:
+            raise ValueError("At least one input is empty.")
+
+        if output.ndim == 1:
+            output = np.array([output], dtype=self.precision)
+
+        if target.ndim == 1:
+            target = np.array([target], dtype=self.precision)
+
+        if output.shape != target.shape:
+            raise ValueError(f"Output shape {output.shape} does not match target shape {target.shape}.")
+
+        # For Softmax + mean CrossEntropyLoss, the derivative with respect to logits is
+        # (softmax_output - target) / batch_size. This matches the loss scaling used in
+        # CrossEntropyLoss.
+        if self.normalisation_function is Softmax and loss_function is CrossEntropyLoss:
+            passed_down_grad = (output - target) / output.shape[0]
+        else:
+            raise TypeError(
+                f"This model's normalisation function - {self.normalisation_function} - currently has no programed back propogtion rules."
+            )
+
+        for layer_index in range(self.number_of_layers, 0, -1):
+            module = self.modules[layer_index - 1]
+            layer = module[0]
+
+            if len(module) > 1 and self.activation_function is ReLU:
+                passed_down_grad = passed_down_grad * backwards_ReLU(layer.last_outputed_array)
+
+            layer.backwards(passed_down_grad)
+
+            self.gradients[f"Layer {layer_index}"] = {
+                "dW": layer.gradients["dW"].copy(),
+                "dB": layer.gradients["dB"].copy(),
+            }
+            passed_down_grad = layer.passed_down_grad
+
+        self.last_operation = "backwards"
+
+
+    def update_parramaters(self, learning_rate : float):
+        """
+        Updates every linear layer using its computed gradients.
+
+        Args:
+            learning_rate (float): Finite scalar learning rate used for
+                                   gradient descent.
+
+        Raises:
+            TypeError: If learning_rate is not numeric.
+            ValueError: If learning_rate is not finite.
+            SequenceError: If backwards() was not called immediately beforehand.
+        """
+        
+        if self.last_operation != "backwards":
+            raise SequenceError("Must compleate a backwards pass imidatley before updating a models parramaters.")
+
+        try: 
+            float(abs(learning_rate))
+        except (TypeError, ValueError) as exc:
+            raise TypeError("Learning rate must be a number, preferably float") from exc
+
+        if not np.isfinite(learning_rate):
+            raise ValueError(f"Learning rate must be finite, currently it is - {learning_rate}")
+
+        for layer_index in range(self.number_of_layers, 0, -1):
+            layer = self.modules[layer_index - 1][0]
+            layer.update_parameters(learning_rate)
+            self.parramaters[f"Layer {layer_index}"] = layer.parramaters
+
+        self.last_operation = "update"
+        
+
+    def set_parramaters(self, parramaters : dict):
+        """
+        Replaces all model layer parameters.
+
+        Args:
+            parramaters (dict): Dictionary containing one entry for each layer,
+                                named "Layer 1", "Layer 2", and so on. Each
+                                entry must contain "weights" and "biases".
+
+        Raises:
+            TypeError: If parramaters is not a dictionary.
+            KeyError: If the layer keys do not match or required parameters
+                      are missing.
+            ValueError: If the number of parameter groups differs from the
+                        current model.
+        """
+
+        if not isinstance(parramaters, dict):
+            raise TypeError(f"Input - {parramaters} - must be a dict.")
+
+        if set(parramaters.keys()) != set(self.parramaters.keys()):
+            raise KeyError(f"Input - {parramaters} - keys do not match those in self.parramaters.")
+
+        if len(self.parramaters) != len(parramaters):
+            raise ValueError(f"Inputed dictionary has a different number of elements than the existing dictionary.")
+
+        
+        modules_copy = self.modules
+        layer_index = 1
+        for obj in modules_copy:
+            if isinstance(obj, LinearLayer):
+                key = f"Layer {layer_index}"
+                if key not in parramaters:
+                    raise KeyError(f"Missing parameter set for {key}.")
+                obj.set_parramaters(parramaters[key])
+                layer_index += 1
+
+        self.modules = modules_copy
+        self.parramaters = parramaters

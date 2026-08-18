@@ -191,6 +191,7 @@ class LinearLayer():
         random_seed (int | None): The NumPy random seed can be set to allow creating layers with 
                                   the same initial conditions repeatedly.
         precision (str): NumPy dtype string for inputs, parameters, and gradients.
+        initialisation_function(str): Allows wight matrix to be initialised using one of the set methods, defults to random uniform [-1, 1].
         last_operation (str): Keeps track of last function called to ensure forward, backward and
                               updates happen in that order during runtime.
         weight_matrix (np.ndarray): Shape (input_size, output_size).
@@ -209,7 +210,7 @@ class LinearLayer():
 
     
 
-    def __init__(self, input_size: int, output_size: int, precision: str = 'float32', random_seed: int = None):
+    def __init__(self, input_size: int, output_size: int, precision: str = 'float32', random_seed: int = None, initialisation_function : str = None):
         if random_seed is not None:
             try:
                rng =  np.random.default_rng(random_seed)
@@ -221,8 +222,11 @@ class LinearLayer():
         self.random_seed = random_seed
         self.precision = precision
         self.last_operation = None
-        
-        self.weight_matrix = np.array(rng.integers(-1000, 1000, size=(input_size,output_size)) / 1000).astype(self.precision)
+
+        if initialisation_function == "He":
+            self.weight_matrix = np.array(rng.normal(0, np.sqrt(2/input_size), size=(input_size, output_size))).astype(self.precision)
+        else:
+            self.weight_matrix = np.array(rng.integers(-1000, 1000, size=(input_size,output_size)) / 1000).astype(self.precision)
         self.bias_matrix = np.array(rng.integers(-1000, 1000, size=(output_size)) / 1000).astype(self.precision)
 
         self.parramaters = {"weights" : self.weight_matrix, "biases" : self.bias_matrix}
@@ -331,6 +335,9 @@ class LinearLayer():
         self.weight_matrix = self.weight_matrix.astype(self.precision)
         self.bias_matrix -= self.gradients["dB"] * learning_rate
         self.bias_matrix = self.bias_matrix.astype(self.precision)
+
+        self.parramaters["weights"] = self.weight_matrix
+        self.parramaters["biases"] = self.bias_matrix
 
 
     def set_parramaters(self, parramaters : dict):

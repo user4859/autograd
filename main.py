@@ -25,7 +25,7 @@ def ReLU(input_array: Union[np.ndarray, List, float, int], inplace: bool = False
         Modifying inplace will not work for integers, as we do not want to force arrays to be int only.
     """
 
-    # Make sure input is/can be a Numpy array and elements are numeric
+    # Make sure input is/can be a NumPy array and elements are numeric
     try:
         float_array = np.asarray(input_array)
         if not np.issubdtype(float_array.dtype, np.number):
@@ -39,7 +39,7 @@ def ReLU(input_array: Union[np.ndarray, List, float, int], inplace: bool = False
         raise ValueError("Cannot apply ReLU to an empty array.")
 
     if inplace:
-        # Modifying inplace forces the array to keep its dtype forever. This prevents arrays from being stuck as integers.
+        # Modifying in-place forces the array to keep its dtype forever. This prevents arrays from being stuck as integers.
         if not np.issubdtype(float_array.dtype, np.floating):
             raise ValueError("In-place operations are only supported on floating-point arrays.")
         return np.maximum(float_array, 0, out=float_array)
@@ -64,7 +64,7 @@ def backwards_ReLU(input_array: Union[np.ndarray, List, float, int]) -> np.ndarr
         ValueError: If the input array is empty.
     """
 
-    # Make sure input is/can be a Numpy array and elements are numeric
+    # Make sure input is/can be a NumPy array and elements are numeric
     try:
         input_array = np.asarray(input_array)
         if not np.issubdtype(input_array.dtype, np.number):
@@ -101,7 +101,7 @@ def Softmax(input_array: Union[np.ndarray, List, float, int], logit_axis: int = 
         ValueError: If the input array is empty or if logit_axis is out of bounds.
     """
 
-    # Make sure input is/can be a Numpy array
+    # Make sure input is/can be a NumPy array
     try:
         float_array = np.asarray(input_array, dtype=float)
     except (TypeError, ValueError) as e:
@@ -129,7 +129,7 @@ def CrossEntropyLoss(input_array: Union[np.ndarray, List, float, int],
     """
     Computes cross-entropy loss between an input array and a target array.
 
-    Inputed arrays **MUST** be a probability distribution summing to 1.
+    Input arrays **MUST** be a probability distribution summing to 1.
     The loss is calculated as: -sum(target * log(input))
     Values smaller than a small epsilon (1e-10) are clipped to avoid log(0).
 
@@ -141,7 +141,7 @@ def CrossEntropyLoss(input_array: Union[np.ndarray, List, float, int],
                           By convention this is the last axis (-1).
 
     Returns:
-        float: Mean cross-entropy loss allong the logit_axis.
+        float: Mean cross-entropy loss along the logit_axis.
 
     Raises:
         TypeError: If either input cannot be converted to numeric arrays.
@@ -168,9 +168,9 @@ def CrossEntropyLoss(input_array: Union[np.ndarray, List, float, int],
         raise ValueError(f"Axis {logit_axis} is out of bounds for an array with {ndim} dimensions.")
 
     if np.any(input_array < 0) or np.any(target_array < 0):
-        raise ValueError("All inputed values must be non-negative.")
+        raise ValueError("All input values must be non-negative.")
 
-    # Check arrays are acutaly probability distributions - sum to 1
+    # Check arrays are actually probability distributions - sum to 1
     if not (
         np.allclose(np.sum(input_array, axis=logit_axis), 1.0)
         and np.allclose(np.sum(target_array, axis=logit_axis), 1.0)
@@ -212,10 +212,10 @@ class LinearLayer():
         weight_matrix (np.ndarray): Weight values with shape
                                     (input_size, output_size).
         bias_matrix (np.ndarray): Bias values with shape (output_size,).
-        last_inputed_array (np.ndarray | None): Input saved during forward().
-        last_outputed_array (np.ndarray | None): Output produced during forward().
+        last_input_array (np.ndarray | None): Input saved during forward().
+        last_output_array (np.ndarray | None): Output produced during forward().
         gradients (dict): Weight and bias gradients from backwards().
-        parramaters (dict): Current layer weights and biases.
+        parameters (dict): Current layer weights and biases.
         passed_down_grad (np.ndarray | None): Gradient passed to the preceding layer.
 
     Notes:
@@ -260,17 +260,17 @@ class LinearLayer():
             self.weight_matrix = np.array(rng.integers(-1000, 1000, size=(input_size,output_size)) / 1000).astype(self.precision)
         self.bias_matrix = np.array(rng.integers(-1000, 1000, size=(output_size)) / 1000).astype(self.precision)
 
-        self.parramaters = {"weights" : self.weight_matrix, "biases" : self.bias_matrix}
+        self.parameters = {"weights" : self.weight_matrix, "biases" : self.bias_matrix}
         self.gradients = {"dW" : None, "dB" : None}
 
-        self.last_inputed_array = None
-        self.last_outputed_array = None
+        self.last_input_array = None
+        self.last_output_array = None
         self.passed_down_grad = None
 
 
     def forward(self, input_array: Union[np.ndarray, List, float, int]) -> np.ndarray:
         """
-        Computes the forward pass through the fully conected layer.
+        Computes the forward pass through the fully connected layer.
 
         One-dimensional inputs are treated as a batch containing one sample
         - making them 2 dimensional.
@@ -296,19 +296,19 @@ class LinearLayer():
         
         # Check for empty arrays
         if input_array.size == 0:
-            raise ValueError("Can not pass forward an empty array.")
+            raise ValueError("Cannot pass forward an empty array.")
 
         if input_array.ndim == 1:
                     input_array = np.array([input_array], dtype=self.precision)
 
-        self.last_inputed_array = input_array.copy().astype(self.precision)
+        self.last_input_array = input_array.copy().astype(self.precision)
 
         # Actual forward pass
-        self.last_outputed_array = np.dot(self.last_inputed_array, self.weight_matrix) + self.bias_matrix
+        self.last_output_array = np.dot(self.last_input_array, self.weight_matrix) + self.bias_matrix
 
         self.last_operation = "forward"
 
-        return self.last_outputed_array
+        return self.last_output_array
 
 
     def backwards(self, error_array: np.ndarray):
@@ -332,13 +332,13 @@ class LinearLayer():
 
         if self.last_operation != "forward":
             raise SequenceError(
-                "A forward pass must have been compleated imidatley before the a backwards pass."
+                "A forward pass must have been completed immediately before a backward pass."
                 )
 
         error_array = error_array.astype(self.precision)
 
         self.gradients["dB"] = np.sum(error_array, axis=0)
-        self.gradients["dW"] = np.dot(self.last_inputed_array.T, error_array)
+        self.gradients["dW"] = np.dot(self.last_input_array.T, error_array)
         self.passed_down_grad = np.dot(error_array, self.weight_matrix.T)
 
         self.last_operation = "backwards"
@@ -358,12 +358,12 @@ class LinearLayer():
         Raises:
             TypeError: If learning_rate is not numeric.
             SequenceError: If backwards() was not called immediately before
-                           update_parramaters().
+                           update_parameters().
         """
 
         if self.last_operation != "backwards":
                     raise SequenceError(
-                        "A backwards pass must have been compleated imidatley before updating layer paramaters."
+                        "A backward pass must have been completed immediately before updating layer parameters."
                         )
 
         try: 
@@ -376,16 +376,16 @@ class LinearLayer():
         self.bias_matrix -= self.gradients["dB"] * learning_rate
         self.bias_matrix = self.bias_matrix.astype(self.precision)
 
-        self.parramaters["weights"] = self.weight_matrix
-        self.parramaters["biases"] = self.bias_matrix
+        self.parameters["weights"] = self.weight_matrix
+        self.parameters["biases"] = self.bias_matrix
 
 
-    def set_parramaters(self, parramaters : dict):
+    def set_parameters(self, parameters : dict):
         """
         Replaces the layer's weights and biases.
 
         Args:
-            parramaters (dict): Dictionary containing "weights" and "biases".
+            parameters (dict): Dictionary containing "weights" and "biases".
 
         Raises:
             TypeError: If the argument is not a dictionary or its values
@@ -394,16 +394,16 @@ class LinearLayer():
             ValueError: If either parameter has an incompatible shape.
         """
 
-        if not isinstance(parramaters, dict):
-            raise TypeError(f"Input - {parramaters} - must be a dict.")
+        if not isinstance(parameters, dict):
+            raise TypeError(f"Input - {parameters} - must be a dict.")
 
         try:
-            new_weights = np.asarray(parramaters["weights"], dtype=self.precision)
-            new_biases = np.asarray(parramaters["biases"], dtype=self.precision)
+            new_weights = np.asarray(parameters["weights"], dtype=self.precision)
+            new_biases = np.asarray(parameters["biases"], dtype=self.precision)
         except KeyError as exc:
-            raise KeyError(f"Input - {parramaters} - dictionary must contain 'weights' and 'biases'") from exc
+            raise KeyError(f"Input - {parameters} - dictionary must contain 'weights' and 'biases'") from exc
         except (TypeError, ValueError) as exc:
-            raise TypeError("Could not convert provided parramaters to numpy arrays") from exc
+            raise TypeError("Could not convert provided parameters to NumPy arrays") from exc
 
         if new_weights.shape != self.weight_matrix.shape:
             raise ValueError(f"weights shape mismatch: expected {self.weight_matrix.shape}, got {new_weights.shape}")
@@ -412,12 +412,12 @@ class LinearLayer():
 
         self.weight_matrix = new_weights.copy()
         self.bias_matrix = new_biases.copy()
-        self.parramaters = {"weights": self.weight_matrix, "biases": self.bias_matrix}
+        self.parameters = {"weights": self.weight_matrix, "biases": self.bias_matrix}
 
 
 class Model():
     """
-    A sequential neural network composed of fully conected linear layers, 
+    A sequential neural network composed of fully connected linear layers,
     activation functions and a normalisation step.
 
     The model contains an input layer, zero or more hidden layers, an output
@@ -428,7 +428,7 @@ class Model():
         input_size (int): Number of input features.
         hidden_size (int): Number of features in hidden layers.
         output_size (int): Number of model outputs.
-        number_of_layers (int): Number of fully conected linear layers.
+        number_of_layers (int): Number of fully connected linear layers.
         precision (str): NumPy dtype used throughout the model.
         random_seed (int | None): Optional initialisation seed.
         initialisation_function (str | None): Parameter initialisation method.
@@ -437,7 +437,7 @@ class Model():
         linear_layers (list): LinearLayer objects in execution order.
         modules (list): Ordered model operations.
         gradients (dict): Gradients grouped by layer.
-        parramaters (dict): Parameters grouped by layer.
+        parameters (dict): Parameters grouped by layer.
         last_operation (str | None): Most recently completed model operation.
 
     Notes:
@@ -522,12 +522,12 @@ class Model():
         layers.append([self.normalisation_function])
 
         self.modules = layers
-        # self.gradients serves no functional purposse, but make it easier to acces all the differnt layer's gradients at once.
+        # self.gradients serves no functional purpose, but makes it easier to access all the different layers' gradients at once.
         self.gradients = {f"Layer {i}": {} for i in range(1, self.number_of_layers + 1)}
 
-        self.parramaters = {}
+        self.parameters = {}
         for i, layer in enumerate(self.linear_layers, start=1):
-            self.parramaters[f"Layer {i}"] = layer.parramaters
+            self.parameters[f"Layer {i}"] = layer.parameters
 
         self.last_operation = None
 
@@ -583,13 +583,13 @@ class Model():
         """
 
         if self.last_operation != "forward":
-            raise SequenceError("Must compleate a forwards pass imidatley before a backwards pass.")
+            raise SequenceError("Must complete a forward pass immediately before a backward pass.")
 
         try:
             output = np.asarray(output, dtype=self.precision)
             target = np.asarray(target, dtype=self.precision)
         except (TypeError, ValueError) as e:
-            raise TypeError(f"The inputed arrays - {output} and {target} must be a numeric array or array-like object. Original error: {e}")
+            raise TypeError(f"The input arrays - {output} and {target} must be numeric array-like objects. Original error: {e}")
 
         if output.size == 0 or target.size == 0:
             raise ValueError("At least one input is empty.")
@@ -610,7 +610,7 @@ class Model():
             passed_down_grad = (output - target) / output.shape[0]
         else:
             raise TypeError(
-                f"This model's normalisation function - {self.normalisation_function} - currently has no programed back propogtion rules."
+                f"This model's normalisation function - {self.normalisation_function} - currently has no programmed backpropagation rules."
             )
 
         for layer_index in range(self.number_of_layers, 0, -1):
@@ -618,7 +618,7 @@ class Model():
             layer = module[0]
 
             if len(module) > 1 and self.activation_function is ReLU:
-                passed_down_grad = passed_down_grad * backwards_ReLU(layer.last_outputed_array)
+                passed_down_grad = passed_down_grad * backwards_ReLU(layer.last_output_array)
 
             layer.backwards(passed_down_grad)
 
@@ -631,7 +631,7 @@ class Model():
         self.last_operation = "backwards"
 
 
-    def update_parramaters(self, learning_rate : float):
+    def update_parameters(self, learning_rate : float):
         """
         Updates every linear layer using its computed gradients.
 
@@ -646,7 +646,7 @@ class Model():
         """
         
         if self.last_operation != "backwards":
-            raise SequenceError("Must compleate a backwards pass imidatley before updating a models parramaters.")
+            raise SequenceError("Must complete a backward pass immediately before updating a model's parameters.")
 
         try: 
             float(abs(learning_rate))
@@ -659,36 +659,36 @@ class Model():
         for layer_index in range(self.number_of_layers, 0, -1):
             layer = self.modules[layer_index - 1][0]
             layer.update_parameters(learning_rate)
-            self.parramaters[f"Layer {layer_index}"] = layer.parramaters
+            self.parameters[f"Layer {layer_index}"] = layer.parameters
 
         self.last_operation = "update"
         
 
-    def set_parramaters(self, parramaters : dict):
+    def set_parameters(self, parameters : dict):
         """
         Replaces all model layer parameters.
 
         Args:
-            parramaters (dict): Dictionary containing one entry for each layer,
+            parameters (dict): Dictionary containing one entry for each layer,
                                 named "Layer 1", "Layer 2", and so on. Each
                                 entry must contain "weights" and "biases".
 
         Raises:
-            TypeError: If parramaters is not a dictionary.
+            TypeError: If parameters is not a dictionary.
             KeyError: If the layer keys do not match or required parameters
                       are missing.
             ValueError: If the number of parameter groups differs from the
                         current model.
         """
 
-        if not isinstance(parramaters, dict):
-            raise TypeError(f"Input - {parramaters} - must be a dict.")
+        if not isinstance(parameters, dict):
+            raise TypeError(f"Input - {parameters} - must be a dict.")
 
-        if set(parramaters.keys()) != set(self.parramaters.keys()):
-            raise KeyError(f"Input - {parramaters} - keys do not match those in self.parramaters.")
+        if set(parameters.keys()) != set(self.parameters.keys()):
+            raise KeyError(f"Input - {parameters} - keys do not match those in self.parameters.")
 
-        if len(self.parramaters) != len(parramaters):
-            raise ValueError(f"Inputed dictionary has a different number of elements than the existing dictionary.")
+        if len(self.parameters) != len(parameters):
+            raise ValueError(f"Input dictionary has a different number of elements than the existing dictionary.")
 
         modules_copy = deepcopy(self.modules)
         copied_layers = [
@@ -699,13 +699,13 @@ class Model():
 
         for layer_index, layer in enumerate(copied_layers, start=1):
             key = f"Layer {layer_index}"
-            if key not in parramaters:
+            if key not in parameters:
                 raise KeyError(f"Missing parameter set for {key}.")
-            layer.set_parramaters(parramaters[key])
+            layer.set_parameters(parameters[key])
 
         self.modules = modules_copy
         self.linear_layers = copied_layers
-        self.parramaters = {
-            f"Layer {layer_index}": layer.parramaters
+        self.parameters = {
+            f"Layer {layer_index}": layer.parameters
             for layer_index, layer in enumerate(copied_layers, start=1)
         }

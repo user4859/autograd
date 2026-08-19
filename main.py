@@ -1,4 +1,5 @@
 import numpy as np
+from copy import deepcopy
 from typing import Union, List
 
 def ReLU(input_array: Union[np.ndarray, List, float, int], inplace: bool = False) -> np.ndarray:
@@ -689,16 +690,22 @@ class Model():
         if len(self.parramaters) != len(parramaters):
             raise ValueError(f"Inputed dictionary has a different number of elements than the existing dictionary.")
 
-        
-        modules_copy = self.modules
-        layer_index = 1
-        for obj in modules_copy:
-            if isinstance(obj, LinearLayer):
-                key = f"Layer {layer_index}"
-                if key not in parramaters:
-                    raise KeyError(f"Missing parameter set for {key}.")
-                obj.set_parramaters(parramaters[key])
-                layer_index += 1
+        modules_copy = deepcopy(self.modules)
+        copied_layers = [
+            module[0]
+            for module in modules_copy
+            if module and isinstance(module[0], LinearLayer)
+        ]
+
+        for layer_index, layer in enumerate(copied_layers, start=1):
+            key = f"Layer {layer_index}"
+            if key not in parramaters:
+                raise KeyError(f"Missing parameter set for {key}.")
+            layer.set_parramaters(parramaters[key])
 
         self.modules = modules_copy
-        self.parramaters = parramaters
+        self.linear_layers = copied_layers
+        self.parramaters = {
+            f"Layer {layer_index}": layer.parramaters
+            for layer_index, layer in enumerate(copied_layers, start=1)
+        }

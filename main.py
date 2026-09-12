@@ -184,9 +184,6 @@ def CrossEntropyLoss(input_array: Union[np.ndarray, List, float, int],
     return float(np.mean(losses))
 
 
-derivatives = {"ReLU" : backwards_ReLU}
-
-
 class SequenceError(Exception):
     """
     Exception raised when model operations are performed out of order.
@@ -195,6 +192,9 @@ class SequenceError(Exception):
     must occur before parameters are updated.
     """
     pass
+
+
+derivatives = {"ReLU" : backwards_ReLU}
 
 
 class LinearLayer():
@@ -379,6 +379,8 @@ class LinearLayer():
         self.parameters["weights"] = self.weight_matrix
         self.parameters["biases"] = self.bias_matrix
 
+        self.last_operation = None
+
 
     def set_parameters(self, parameters : dict):
         """
@@ -414,6 +416,8 @@ class LinearLayer():
         self.bias_matrix = new_biases.copy()
         self.parameters = {"weights": self.weight_matrix, "biases": self.bias_matrix}
 
+        self.last_operation = None
+
 
 class Model():
     """
@@ -443,7 +447,7 @@ class Model():
     Notes:
         If number_of_layers = 1, then the input layer is the output layer,
         and only the normalisation function is used.
-        The current backwards() implementation supports Softmax followed by
+        The current backwards() implementation only supports Softmax followed by
         CrossEntropyLoss.
     """
 
@@ -493,6 +497,9 @@ class Model():
         layers = []
         self.linear_layers = []
 
+        if self.number_of_layers < 1:
+            raise ValueError(f"All models must have at least one layer")
+
         if self.number_of_layers == 1:
             layer = LinearLayer(self.input_size, self.output_size,
                                     self.precision, self.random_seed,
@@ -506,15 +513,15 @@ class Model():
             layers.append([input_layer, self.activation_function])
             self.linear_layers.append(input_layer)
 
-            for _ in range(max(0, self.number_of_layers - 2)):
+            for i in range(max(0, self.number_of_layers - 2)):
                 hidden_layer = LinearLayer(self.hidden_size, self.hidden_size,
-                                              self.precision, self.random_seed,
+                                              self.precision, self.random_seed + (i+1),
                                               self.initialisation_function)
                 layers.append([hidden_layer, self.activation_function])
                 self.linear_layers.append(hidden_layer)
 
             output_layer = LinearLayer(self.hidden_size, self.output_size,
-                                          self.precision, self.random_seed,
+                                          self.precision, self.random_seed + (i+1),
                                           self.initialisation_function)
             layers.append([output_layer])
             self.linear_layers.append(output_layer)
@@ -617,9 +624,14 @@ class Model():
             module = self.modules[layer_index - 1]
             layer = module[0]
 
-            if len(module) > 1 and self.activation_function is ReLU:
-                passed_down_grad = passed_down_grad * backwards_ReLU(layer.last_output_array)
-
+            if len(module) > 1:
+                if self.activation_function is ReLU:
+                    passed_down_grad = passed_down_grad * backwards_ReLU(layer.last_output_array)
+                else:
+                    raise TypeError(
+                        f"This model's activation function - {self.activation_function} - currently has no programmed backpropagation rules."
+                        )
+            
             layer.backwards(passed_down_grad)
 
             self.gradients[f"Layer {layer_index}"] = {
@@ -709,3 +721,5 @@ class Model():
             f"Layer {layer_index}": layer.parameters
             for layer_index, layer in enumerate(copied_layers, start=1)
         }
+
+        self.last_operation = "set parramaters"

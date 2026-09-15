@@ -256,6 +256,8 @@ class LinearLayer():
 
         if initialisation_function == "He":
             self.weight_matrix = np.array(rng.normal(0, np.sqrt(2/input_size), size=(input_size, output_size))).astype(self.precision)
+        elif initialisation_function != None:
+            raise ValueError(f"{initialisation_function} - initialisation function is not currently supported")
         else:
             self.weight_matrix = np.array(rng.integers(-1000, 1000, size=(input_size,output_size)) / 1000).astype(self.precision)
         self.bias_matrix = np.array(rng.integers(-1000, 1000, size=(output_size)) / 1000).astype(self.precision)
@@ -521,7 +523,7 @@ class Model():
                 self.linear_layers.append(hidden_layer)
 
             output_layer = LinearLayer(self.hidden_size, self.output_size,
-                                          self.precision, self.random_seed + (i+1),
+                                          self.precision, self.random_seed + self.number_of_layers,
                                           self.initialisation_function)
             layers.append([output_layer])
             self.linear_layers.append(output_layer)
@@ -624,15 +626,14 @@ class Model():
             module = self.modules[layer_index - 1]
             layer = module[0]
 
-            if len(module) > 1:
-                if self.activation_function is ReLU:
-                    passed_down_grad = passed_down_grad * backwards_ReLU(layer.last_output_array)
-                else:
-                    raise TypeError(
-                        f"This model's activation function - {self.activation_function} - currently has no programmed backpropagation rules."
-                        )
-            
             layer.backwards(passed_down_grad)
+
+            passed_down_grad = layer.passed_down_grad
+
+            # Apply the activation derivative if there is a hidden layer before this one
+            if layer_index > 1 and self.activation_function is ReLU:
+                prev_layer = self.modules[layer_index - 2][0]
+                passed_down_grad = passed_down_grad * backwards_ReLU(prev_layer.last_output_array)
 
             self.gradients[f"Layer {layer_index}"] = {
                 "dW": layer.gradients["dW"].copy(),

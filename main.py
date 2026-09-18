@@ -244,7 +244,7 @@ class LinearLayer():
 
         if random_seed is not None:
             try:
-               rng =  np.random.default_rng(random_seed)
+               rng = np.random.default_rng(random_seed)
             except (TypeError, ValueError) as exc:
                 raise TypeError("Random seed must be int") from exc
         else:

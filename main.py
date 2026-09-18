@@ -639,7 +639,6 @@ class Model():
                 "dW": layer.gradients["dW"].copy(),
                 "dB": layer.gradients["dB"].copy(),
             }
-            passed_down_grad = layer.passed_down_grad
 
         self.last_operation = "backwards"
 
@@ -723,4 +722,4 @@ class Model():
             for layer_index, layer in enumerate(copied_layers, start=1)
         }
 
-        self.last_operation = "set parramaters"
+        self.last_operation = "set parameters"
